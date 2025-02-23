@@ -1,4 +1,6 @@
 .env/
+.env/
 node_modules/
 app.log/
+.env.sample/
 .env.sample/
