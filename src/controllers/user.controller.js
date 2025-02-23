@@ -15,6 +15,7 @@ const generateAccessandRefreshToken = async(userId)=>
     user.save();
     return {accessToken,refreshToken};
 }
+
 const register = asyncHandler(async (req,res,next)=>
 {
     const {fullname,email,password,username} = req.body;
@@ -220,13 +221,183 @@ const updateAccountDetails = asyncHandler(async(req,res,next)=>{
 
 const updateUserAvatar = asyncHandler(async(req,res,next)=>
     {
+
+        const avatarLocalPath = req.files?.path;
+        if(!avatarLocalPath)
+        {
+            throw new ApiError(400,'Error fetching the avatar file')
+        }
+
+        console.log(avatarLocalPath);
+
         const user = await User.findById(req.user?._id);
         console.log(user);
         
         try {
-            
+            await deleteFromCloudinary(user.avatar.public_id);
+            console.log("file has been deleted successfully");
         } catch (error) {
-            
+            throw new ApiError(500,'Error deleting the avatar file')
         }
+
+        let response;
+        try {
+            response = await uploadOnCloudinary(avatarLocalPath);
+            console.log(response);
+            if(!response)
+            {
+                throw new ApiError(400,'Avatar could not be updated')
+            }
+        } catch (error) {
+            throw new ApiError(500,'Error updating the avatar file')
+        }
+
+        user.avatar = response?.url;
+        await user.save();
+        return res.status(200).json(new ApiResponse(200,'Avatar updated successfully'))
     })
-export {register,login,refreshAccessToken,logOut,changePassword,updateAccountDetails}
+
+const updateCoverImage = asyncHandler(async(req,res,next)=>
+    {
+
+        const coverLocalPath = req.files?.path;
+        if(!coverLocalPath)
+        {
+            throw new ApiError(400,'Error fetching the coverImage file')
+        }
+
+        console.log(coverLocalPath);
+
+        const user = await User.findById(req.user?._id);
+        console.log(user);
+        
+        try {
+            await deleteFromCloudinary(user.coverImage.public_id);
+            console.log("file has been deleted successfully");
+        } catch (error) {
+            throw new ApiError(500,'Error deleting the Cover-Image file')
+        }
+
+        let response;
+        try {
+            response = await uploadOnCloudinary(coverLocalPath);
+            console.log(response);
+            if(!response)
+            {
+                throw new ApiError(400,'Cover-Image could not be updated')
+            }
+        } catch (error) {
+            throw new ApiError(500,'Error updating the Cover-Image file')
+        }
+
+        user.coverImage = response?.url;
+        await user.save();
+        return res.status(200).json(new ApiResponse(200,'Cover-Image updated successfully'))
+    })
+
+const getCurrentAccountDetails = asyncHandler(async(req,res,next)=>{
+    const user = user.findById(req.user?._id).select('-password refreshToken');
+    return res.status(200).json(new ApiResponse(200,user,'User Details have been fetched Successfully'));
+})
+
+const getUserChannelProfile = asyncHandler(async(req,res,next)=>{
+    const username = req.params.username;
+    console.log(username);
+    if(!username)
+    {
+        throw new ApiError(400,'Username not found')
+    }
+    
+    const channel = await User.aggregate([
+        {
+            $match:{username:username?.toLowerCase()}
+        },
+        {
+            $lookup:{
+                from:'subscriptions',
+                localField:'_id',
+                foreignField:'subscriber',
+                as:'subscribers'
+            }
+        },
+        {
+            $lookup:{
+                from:'subscriptions',
+                localField:'_id',
+                foreignField:'channel',
+                as:'channelSubscribed'
+            }
+        },
+        {
+            $addFields:{
+                subscriberCount:{$size:{$subscribers}},
+                channelsSubscribedCount:{$size:{$channelSubscribeed}},
+                isSubscribed:{
+                    $cond:{$in: [req.user?._id,'$subscribers.subscriber']},
+                    then:true,
+                    else:false
+                }
+            }
+        },
+        {
+            $project:{
+                fullname:1,
+                username:1,
+                avatar:1,
+                coverImage:1,
+                subscriberCount:1,
+                channelsSubscribedCount:1,
+                isSubscribed:1,
+            }
+        }
+    ])
+
+    if(!channel.length())
+    {
+        throw new ApiError(400,'Username not found')
+    }
+
+    return res.status(200).json(new ApiResponse(200,channel[0],'Username details has been fetched successfully'))
+})
+
+const getWatchHistory = asyncHandler(async (req,res,next)=>{
+const history = await User.aggregate(
+    [
+        {$match:{_id: new mongoose.Types.ObjectId(req.user?._id)}},
+        {
+                $lookup:{
+                    from:'videos',
+                    localField:'watchHistory',
+                    foreignField:'_id',
+                    as:'watchHistory'
+                    ,pipeline:[
+                    {
+                        $lookup:{
+                            from:'users',
+                            localField:'owner',
+                            foreignField:'_id',
+                            as:'owner',
+                            pipeline:[
+                                {
+                                    $project:{
+                                        fullname:1,
+                                        username:1,
+                                        avatar:1,
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $addFields:{owner:{$first:"$owner"}}
+        }
+    ])
+
+    return res.status(200).json(new ApiResponse(200,history[0].watchHistory,'Watch History extracted successfully'));
+})
+
+
+export {register,login,refreshAccessToken,logOut,changePassword,updateAccountDetails,updateUserAvatar,updateCoverImage,getCurrentAccountDetails,getUserChannelProfile}
