@@ -1,0 +1,1 @@
+This is a replica of Youtube cretaed using the node js and express framework in order to have a little understanding of the production grade environment
