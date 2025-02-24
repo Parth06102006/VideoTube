@@ -4,5 +4,5 @@ node_modules/
 app.log
 /src/.env.sample
 /.env.sample
-.prettierignore/
-.prettierrc/
+.prettierignore
+.prettierrc
